@@ -9,6 +9,7 @@ import {
 } from "effector";
 import { readonly } from "patronum/readonly";
 import { spread } from "patronum/spread";
+
 type BroadcastConfig<P> = {
   channelName: string;
   event: Event<P>;
@@ -26,24 +27,26 @@ export const createBroadcast = <P>(config: BroadcastConfig<P>) => {
   const sendDone = createEvent<P>();
   const sendFailed = createEvent<{ payload: P; error: Error }>();
 
-  const $unsubscribe = createStore(() => {});
+  const $unsubscribe = createStore(() => {}, {
+    serialize: "ignore",
+  });
 
   const subscribeChannelFx = attach({
     source: $unsubscribe,
     effect: (unsubscribe, channel: BroadcastChannel) => {
       unsubscribe();
-      const abortController = new AbortController();
 
-      channel.addEventListener(
-        "message",
-        scopeBind((e) => {
+      const messageHandler = scopeBind(
+        (e: MessageEvent) => {
           const payload = config.parse(e.data);
           received(payload);
-        }),
-        { signal: abortController.signal }
+        },
+        { safe: true }
       );
 
-      return () => abortController.abort();
+      channel.addEventListener("message", messageHandler);
+
+      return () => channel.removeEventListener("message", messageHandler);
     },
   });
   const unsubscribeChannelFx = attach({
@@ -95,12 +98,6 @@ export const createBroadcast = <P>(config: BroadcastConfig<P>) => {
     fn: () => config.channelName,
     target: setupChannelFx,
   });
-  if (config.teardown) {
-    sample({
-      clock: config.teardown,
-      target: teardownChannelFx,
-    });
-  }
   sample({
     clock: setupChannelFx.doneData,
     fn: ({ channel, subscription }) => ({
@@ -112,6 +109,18 @@ export const createBroadcast = <P>(config: BroadcastConfig<P>) => {
       $unsubscribe,
     }),
   });
+
+  if (config.teardown) {
+    sample({
+      clock: config.teardown,
+      target: teardownChannelFx,
+    });
+    sample({
+      clock: teardownChannelFx.doneData,
+      target: [$channel.reinit, $unsubscribe.reinit],
+    });
+  }
+
   sample({
     clock: config.event,
     source: $channel,
