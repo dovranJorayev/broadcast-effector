@@ -58,10 +58,6 @@ sample({
 });
 
 debug(
-  // model units
-  $isActive,
-  $isPopupOpen,
-  openPopup,
   // Broadcast events
   broadcastApi.received,
   broadcastApi.done,
