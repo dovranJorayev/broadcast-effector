@@ -1,0 +1,5 @@
+{
+  "plugins": [
+    ["effector/babel-plugin", { "addLoc": true, "factories": ["@withease/web-api", "@lib/broadcast"] }]
+  ]
+}
